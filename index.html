@@ -982,8 +982,7 @@ function printDoc(titulo,bodyHTML){
   <div class="hd"><img src="${CARINTHIA_LOGO}"><div><h1>CARINTHIA</h1><div class="st">Predio Cubiro · Palma OxG · Maní, Casanare</div></div></div>
   ${bodyHTML}
   <div class="foot"><span>CARINTHIA · Origen. Territorio. Permanencia.</span><span>Generado ${new Date().toLocaleString('es-CO')}</span></div>
-  <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(){})})}</script>
-</body></html>`);
+  </body></html>`);
   w.document.close();setTimeout(()=>w.print(),500)}
 function fechaMasReciente(arr){return arr.length?arr.map(r=>r.fecha).sort().reverse()[0]:null}
 function printCosechaDia(){
@@ -1088,6 +1087,8 @@ seedTrab();addCortField();buildControles();initNormas();initLineViewer();renderA
 document.getElementById('roleSel').value=ROLE;document.getElementById('lockLogo').src=CARINTHIA_LOGO;buildNav();fillWorkerSelects();
 if(PASSWORDS[ROLE]&&!window._auth[ROLE]){showLock(ROLE)}
 hookPhoto('m_foto','m_fotoprev','_foto_m');hookPhoto('sp_foto','sp_fotoprev','_foto_sp');
+
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(){})});}
 </script>
 </body>
 </html>

@@ -228,6 +228,35 @@
     <div id="i_kpis" class="kpis" style="grid-template-columns:repeat(2,1fr);margin-bottom:10px"></div>
     <div class="tablewrap"><table id="i_table"></table></div>
   </div>
+
+  <div class="card" style="background:#fbf6f4">
+    <h2>👥 Polinización en grupo (fase preventiva)</h2>
+    <div class="muted">Cuando las flores en <b>posantesis</b> entran en fase preventiva, el grupo (o parte) hace la misma labor. Registra la aplicación colectiva de <b>ANA</b> por rango de líneas.</div>
+    <div class="row">
+      <div><label>Fecha</label><input type="date" id="gr_fecha"></div>
+      <div><label>Lote</label><select id="gr_lote" onchange="fillLineasRange()"></select></div>
+      <div><label>Fase</label><select id="gr_fase"><option>Preventiva (posantesis)</option><option>Refuerzo</option><option>Normal</option></select></div>
+    </div>
+    <div class="row">
+      <div><label>Línea desde</label><select id="gr_ldesde"></select></div>
+      <div><label>Línea hasta</label><select id="gr_lhasta"></select></div>
+    </div>
+    <label>Participantes (grupo o parte del grupo)</label>
+    <div id="gr_part" style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px"></div>
+    <div class="row" style="margin-top:8px">
+      <div><label>ANA entregado (g)</label><input type="number" id="gr_anaent" inputmode="decimal" placeholder="0"></div>
+      <div><label>ANA devuelto (g)</label><input type="number" id="gr_anadev" inputmode="decimal" placeholder="0"></div>
+      <div><label>Flores polinizadas</label><input type="number" id="gr_flores" inputmode="numeric" placeholder="0"></div>
+    </div>
+    <label>Observación (opcional)</label>
+    <textarea id="gr_obs" rows="2" placeholder="Ej: aplicación preventiva por posantesis..."></textarea>
+    <button class="btn" onclick="addGrupo()">Guardar labor de grupo</button>
+  </div>
+  <div class="card">
+    <h2>Labores de grupo <span class="muted" id="gr_count"></span></h2>
+    <div id="gr_kpis" class="kpis" style="grid-template-columns:repeat(2,1fr);margin-bottom:10px"></div>
+    <div class="tablewrap"><table id="gr_table"></table></div>
+  </div>
 </section>
 
 <!-- ================= VÍA 2: COSECHA ================= -->
@@ -448,6 +477,7 @@
     <div style="margin-top:8px">
       <button class="btn sec mini" onclick="exportCSV('flores')">⬇️ Flores</button>
       <button class="btn sec mini" onclick="exportCSV('insumos')">⬇️ Polen/ANA</button>
+      <button class="btn sec mini" onclick="exportCSV('grupo')">⬇️ Grupo (fase preventiva)</button>
       <button class="btn sec mini" onclick="exportCSV('cosecha_dia')">⬇️ Cosecha diaria (formato Excel)</button>
       <button class="btn sec mini" onclick="exportCSV('cosecha_cort')">⬇️ Cosecha por cortador</button>
       <button class="btn sec mini" onclick="exportCSV('volqueta')">⬇️ Volquetas</button>
@@ -551,9 +581,11 @@ const LABORES_SEED=[
 ];
 
 //============ ALMACENAMIENTO ============
-const DB={poli:'cub_poli',cosecha:'cub_cosecha',volq:'cub_volq',labores:'cub_labores',monit:'cub_monit',superv:'cub_superv',insumos:'cub_insumos',trab:'cub_trab',preciohist:'cub_preciohist',normas:'cub_normas'};
+const DB={poli:'cub_poli',cosecha:'cub_cosecha',volq:'cub_volq',labores:'cub_labores',monit:'cub_monit',superv:'cub_superv',insumos:'cub_insumos',trab:'cub_trab',grupo:'cub_grupo',preciohist:'cub_preciohist',normas:'cub_normas'};
 const PASSWORDS={jefe:'ALFONSO2026',supervisor:'SUPERVISOR',gerente:'CARINTHIA2009'};
 window._auth={};
+const SEED_SNAPSHOT={"cub_poli":[{"id":1785176384742,"fecha":"2026-07-27","lote":"6","linea":"L77","poli":"Cristian Niño","flores":120,"polinizadas":0,"palmas":0,"pase":"Único","ana":"Sí","obs":""}],"cub_labores":[{"id":1785160557058,"cat":"Sanidad","prio":"alta","desc":"Control preventivo de defoliadores (Sibine, Automeris, Natada, Euprosterna, Mesocia)","lote":"1, 3, 6","dosis":"Bacillus thuringiensis 0,5 L/ha + Beauveria bassiana 500 g/ha (biológico)","fuente":"Informe 09-jun-2026","fecha":"2026-06-29","estado":"pend"},{"id":1785160557059,"cat":"Sanidad","prio":"media","desc":"Censo/monitoreo de defoliadores en hojas inferiores (poblaciones confinadas)","lote":"1, 3, 6","dosis":"","fuente":"Informe 09-jun-2026","fecha":"","estado":"pend"},{"id":1785160557060,"cat":"Vivero","prio":"alta","desc":"Aplicación de insecticida por cogolleros en parte inicial del vivero (inmediata)","lote":"Vivero","dosis":"Insecticida según etiqueta","fuente":"Informe 09-jun-2026","fecha":"2026-06-16","estado":"pend"},{"id":1785160557061,"cat":"Vivero","prio":"media","desc":"Control de malezas en bolsas con ciclo más corto (o traperos químicos)","lote":"Vivero","dosis":"","fuente":"Informe 09-jun-2026","fecha":"","estado":"pend"},{"id":1785160557062,"cat":"Vivero","prio":"baja","desc":"Selección/eliminación de palmas no aptas (925 eliminadas; 1475 en espera para nov-2026)","lote":"Vivero","dosis":"","fuente":"Informe 06-jul-2026","fecha":"","estado":"proceso"},{"id":1785160557063,"cat":"Siembra","prio":"alta","desc":"Control químico de malezas del lote a sembrar (antes que crezca la gramínea)","lote":"Nueva siembra","dosis":"Glifosato 2,5 L/ha + surfactante reductor de pH — sugerido con dron","fuente":"Informe jun/jul 2026","fecha":"2026-08-01","estado":"pend"},{"id":1785160557064,"cat":"Siembra","prio":"media","desc":"Encalado del lote a sembrar antes de la siembra","lote":"Nueva siembra","dosis":"Cal según análisis","fuente":"Informe 09-jun-2026","fecha":"","estado":"pend"},{"id":1785160557065,"cat":"Siembra","prio":"alta","desc":"Siembra en campo de 7.167 palmas (~56 ha a 128/ha) cuando tengan 11–12 hojas","lote":"Nueva siembra","dosis":"","fuente":"Actualizado vivero","fecha":"2026-08-15","estado":"pend"},{"id":1785160557066,"cat":"Nutrición","prio":"alta","desc":"Aplicación de calcio (Oro Cálculo) a toda la plantación antes de agosto — preparar para verano","lote":"Toda la plantación","dosis":"100 g por palma","fuente":"Informe 09-jun-2026","fecha":"2026-07-31","estado":"pend"},{"id":1785160557067,"cat":"Nutrición","prio":"media","desc":"Realizar análisis foliares + medidas vegetativas para plan de fertilización del 2º semestre","lote":"Toda la plantación","dosis":"","fuente":"Informe 09-jun-2026","fecha":"","estado":"pend"},{"id":1785160557068,"cat":"Poda","prio":"baja","desc":"Mantener poda con mínimo 42 hojas por palma (verificado en lote 3, correcto)","lote":"Todos","dosis":"","fuente":"Informe 09-jun-2026","fecha":"","estado":"proceso"},{"id":1785160557069,"cat":"Polinización","prio":"alta","desc":"Ejecutar polinización en PASE ÚNICO óptimo (evitar reingresos de 2–3 veces que desajustan la eficiencia)","lote":"Todos","dosis":"","fuente":"Ing. agrónoma","fecha":"","estado":"proceso"},{"id":1785160557070,"cat":"Polinización","prio":"media","desc":"Ante retraso de frecuencia (>2 semanas): rescatar con polen ANA para asegurar llenado del fruto y evitar pérdidas","lote":"Según desfase","dosis":"Polen ANA","fuente":"Ing. agrónoma","fecha":"","estado":"pend"},{"id":1785160557071,"cat":"Riego","prio":"alta","desc":"Época seca: incrementar volumen/frecuencia de riego para compensar la alta evapotranspiración","lote":"Todos","dosis":"","fuente":"Ing. agrónoma","fecha":"","estado":"pend"},{"id":1785160557072,"cat":"Nutrición","prio":"media","desc":"Déficit hídrico: ajustar fertirriego/nutrición para asegurar absorción sin elevar salinidad del suelo","lote":"Todos","dosis":"","fuente":"Ing. agrónoma","fecha":"","estado":"pend"},{"id":1785160557073,"cat":"Poda","prio":"media","desc":"Temporada seca: reforzar poda de hojas senescentes/improductivas para reducir transpiración y facilitar riego e insumos","lote":"Todos","dosis":"","fuente":"Ing. agrónoma","fecha":"","estado":"pend"}],"cub_insumos":[{"id":1785176387153,"fecha":"2026-07-27","resp":"Cristian Niño","polEnt":0,"polSob":0,"anaEnt":1728,"anaSob":152,"obs":""}],"cub_trab":[{"id":1785198000653,"nombre":"Agustin Buitrago","cos":true,"pol":false},{"id":1785175901653,"nombre":"Cristian Niño","cos":false,"pol":true},{"id":1785175849407,"nombre":"Lilibeth Nieves","cos":false,"pol":true},{"id":1785175828488,"nombre":"Margarita Rivera","cos":false,"pol":true},{"id":1785175916673,"nombre":"Robinson Gaviria","cos":false,"pol":true},{"id":1785175863751,"nombre":"Sara Tumay","cos":false,"pol":true},{"id":1785175944968,"nombre":"Steven Niño","cos":false,"pol":true},{"id":1785175882643,"nombre":"Yudi Rodriguez","cos":false,"pol":true}],"cub_normas":{"hapoli":14,"racimoscos":300,"ciclo":25,"racimosdia":1300,"hapepa":40,"arrastre":4}};
+(function(){if(localStorage.getItem('cub_seed_v1'))return;try{for(var k in SEED_SNAPSHOT){if(localStorage.getItem(k)===null){localStorage.setItem(k,JSON.stringify(SEED_SNAPSHOT[k]));}}}catch(e){}localStorage.setItem('cub_seed_v1','1');})();
 const CONTROLES_SUP=['Calidad de cosecha (corte correcto, sin pérdida de fruto, manejo del racimo)','Control sanitario (inspección fitosanitaria permanente)','Calidad de supervisión y destape (verificación de polinización, seguimiento del ciclo 5,5 m)','Auditoría de poda y mantenimiento (arquitectura de la palma, cobertura en época seca)','Eficiencia y cumplimiento de metas por sector'];
 const load=(k)=>JSON.parse(localStorage.getItem(k)||'[]');
 const loadObj=(k,def)=>{try{return Object.assign({},def,JSON.parse(localStorage.getItem(k)||'{}'))}catch(e){return def}};
@@ -596,11 +628,11 @@ function show(id,btn){document.querySelectorAll('.tab').forEach(t=>t.classList.r
 
 //============ INIT ============
 document.getElementById('hoy').textContent=new Date().toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'});
-['p_fecha','c_fecha','v_fecha','m_fecha','sp_fecha','i_fecha'].forEach(id=>document.getElementById(id).value=todayISO());
+['p_fecha','c_fecha','v_fecha','m_fecha','sp_fecha','i_fecha','gr_fecha'].forEach(id=>document.getElementById(id).value=todayISO());
 document.getElementById('liq_hasta').value=todayISO();
 document.getElementById('liq_desde').value=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
 function fillLotes(sel){LOTES.forEach(l=>{const o=document.createElement('option');o.value=l.n;o.textContent='Lote '+l.n+(l.s==='Nueva'?' (nueva)':'');sel.appendChild(o)})}
-['p_lote','c_lote','m_lote'].forEach(id=>fillLotes(document.getElementById(id)));
+['p_lote','c_lote','m_lote','gr_lote'].forEach(id=>fillLotes(document.getElementById(id)));
 function fillLineas(loteSelId,lineaSelId){
   const lote=document.getElementById(loteSelId).value;
   const sel=document.getElementById(lineaSelId);if(!sel)return;
@@ -740,6 +772,42 @@ function renderInsumos(){
      <div class="kpi"><div class="n">${fmt(tAna,0)} g</div><div class="l">ANA consumido</div><div class="d">rescates</div></div>
      <div class="kpi"><div class="n">${flores?fmt(rend,1):'—'}</div><div class="l">g polen / 1.000 flores</div><div class="d">rendimiento</div></div>
      <div class="kpi"><div class="n">${fmt(d.length)}</div><div class="l">Jornadas registradas</div><div class="d"></div></div>`}
+
+//============ POLINIZACIÓN EN GRUPO (fase preventiva) ============
+function fillLineasRange(){
+  const lote=document.getElementById('gr_lote').value;const arr=LINEAS_LOTE[lote]||[];
+  const opts=arr.length?arr.map((p,i)=>`<option value="${i+1}">L${i+1} · ${p} palmas</option>`).join(''):'<option value="">(sin líneas)</option>';
+  document.getElementById('gr_ldesde').innerHTML=opts;document.getElementById('gr_lhasta').innerHTML=opts;
+  if(arr.length){document.getElementById('gr_lhasta').value=arr.length}}
+function renderGrupoPart(){
+  const pol=load(DB.trab).filter(t=>t.pol);
+  document.getElementById('gr_part').innerHTML=pol.length?pol.map(t=>`<label class="pill" style="cursor:pointer"><input type="checkbox" class="grp" value="${t.nombre}" style="margin-right:5px">${t.nombre}</label>`).join(''):'<span class="muted">Agrega polinizadores en Datos → Trabajadores.</span>'}
+function addGrupo(){
+  const g=id=>document.getElementById(id);
+  const part=[...document.querySelectorAll('#gr_part .grp:checked')].map(c=>c.value);
+  const ent=+g('gr_anaent').value||0,dev=+g('gr_anadev').value||0;
+  const r={id:Date.now(),fecha:g('gr_fecha').value,lote:g('gr_lote').value,fase:g('gr_fase').value,
+    ldesde:g('gr_ldesde').value,lhasta:g('gr_lhasta').value,participantes:part,
+    anaEnt:ent,anaDev:dev,anaCons:ent-dev,flores:+g('gr_flores').value||0,obs:g('gr_obs').value.trim()};
+  if(!part.length){toast('Marca los participantes del grupo');return}
+  if(dev>ent){toast('El ANA devuelto no puede superar el entregado');return}
+  const d=load(DB.grupo);d.unshift(r);save(DB.grupo,d);
+  ['gr_anaent','gr_anadev','gr_flores','gr_obs'].forEach(id=>g(id).value='');
+  document.querySelectorAll('#gr_part .grp:checked').forEach(c=>c.checked=false);
+  toast('✓ Labor de grupo guardada');renderGrupo()}
+function renderGrupo(){
+  const d=load(DB.grupo);document.getElementById('gr_count').textContent='('+d.length+')';
+  let tCons=0,tFlores=0;
+  let h='<tr><th>Fecha</th><th>Lote · Líneas</th><th>Fase</th><th class="num">ANA cons.</th><th class="num">Flores</th><th>Grupo</th><th></th></tr>';
+  d.slice(0,50).forEach(r=>{tCons+=r.anaCons;tFlores+=r.flores;
+    h+=`<tr><td>${r.fecha}</td><td>L${r.lote} · ${r.ldesde}–${r.lhasta}</td><td>${(r.fase||'').split(' ')[0]}</td><td class="num">${fmt(r.anaCons,0)}</td><td class="num">${fmt(r.flores)}</td><td>${(r.participantes||[]).length} pers.${r.obs?'<br><small class="muted">'+r.obs+'</small>':''}</td><td><button class="del" onclick="delRow('${DB.grupo}',${r.id},renderGrupo)">✕</button></td></tr>`});
+  document.getElementById('gr_table').innerHTML=d.length?h:'<tr><td class="muted">Sin labores de grupo</td></tr>';
+  const gflor=tFlores?(tCons/tFlores):0;
+  document.getElementById('gr_kpis').innerHTML=
+    `<div class="kpi"><div class="n">${fmt(tCons,0)} g</div><div class="l">ANA consumido (grupo)</div><div class="d">acumulado</div></div>
+     <div class="kpi"><div class="n">${fmt(tFlores)}</div><div class="l">Flores polinizadas</div><div class="d">en fase preventiva</div></div>
+     <div class="kpi"><div class="n">${tFlores?fmt(gflor,1):'—'}</div><div class="l">g ANA / flor</div><div class="d">rendimiento</div></div>
+     <div class="kpi"><div class="n">${fmt(d.length)}</div><div class="l">Labores registradas</div><div class="d"></div></div>`}
 
 //============ SUPERVISIÓN ============
 function buildControles(){document.getElementById('sp_controles').innerHTML=CONTROLES_SUP.map((t,i)=>`<div class="chk"><div class="t"><label style="margin:0;color:var(--txt);font-weight:600">${i+1}. ${t}</label></div><select id="spc_${i}" style="width:130px;flex:0 0 auto"><option value="OK">✓ OK</option><option value="Observado">Observado</option><option value="Deficiente">Deficiente</option><option value="NA">N/A</option></select></div>`).join('')}
@@ -916,7 +984,8 @@ function workerOptions(rol,sel){
 function fillWorkerSelects(){
   const pp=document.getElementById('p_poli');if(pp){const v=pp.value;pp.innerHTML=workerOptions('pol',v)}
   const ir=document.getElementById('i_resp');if(ir){const v=ir.value;ir.innerHTML=workerOptions('pol',v)}
-  document.querySelectorAll('#cortadores .cn').forEach(s=>{const v=s.value;s.innerHTML=workerOptions('cos',v)})}
+  document.querySelectorAll('#cortadores .cn').forEach(s=>{const v=s.value;s.innerHTML=workerOptions('cos',v)})
+  if(typeof renderGrupoPart==='function')renderGrupoPart()}
 function refreshDatalists(){fillWorkerSelects()}
 function csvEsc(v){v=(v==null?'':''+v);return /[",;\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
 function download(name,content,type){const b=new Blob([content],{type});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
@@ -937,6 +1006,8 @@ function exportCSV(kind){
     load(DB.insumos).forEach(r=>rows.push([r.fecha,r.resp,r.polEnt,r.polSob,r.polEnt-r.polSob,r.anaEnt,r.anaSob,r.anaEnt-r.anaSob,r.obs]))}
   if(kind==='precios'){name='precios_'+fecha+'.csv';rows.push(['Fecha','Precio tonelada','Factor extraccion','Valor por tonelada fruto']);
     load(DB.preciohist).forEach(r=>rows.push([r.fecha,r.precio,r.factor,r.frutaTon]))}
+  if(kind==='grupo'){name='polinizacion_grupo_'+fecha+'.csv';rows.push(['Fecha','Lote','Linea desde','Linea hasta','Fase','Participantes','ANA entregado g','ANA devuelto g','ANA consumido g','Flores']);
+    load(DB.grupo).forEach(r=>rows.push([r.fecha,r.lote,r.ldesde,r.lhasta,r.fase,(r.participantes||[]).join(' | '),r.anaEnt,r.anaDev,r.anaCons,r.flores]))}
   if(kind==='volqueta'){name='volquetas_'+fecha+'.csv';rows.push(['Fecha','Placa/Viaje','Racimos','Kg','Ticket','Castigo kg']);
     load(DB.volq).forEach(r=>rows.push([r.fecha,r.placa,r.racimos,r.kg,r.ticket,r.castigo]))}
   if(kind==='labores'){name='labores_'+fecha+'.csv';rows.push(['Categoria','Prioridad','Descripcion','Lote','Fecha limite','Dosis','Fuente','Estado']);
@@ -955,7 +1026,7 @@ function renderBackupStatus(){
   el.className='note '+(alerta?'bad-note':'');
   el.innerHTML=`⚠️ <b>${ch}</b> cambio(s) sin respaldar${days!==null?' · último respaldo hace <b>'+days+'</b> día(s)':' · <b>nunca has respaldado</b>'}. <button class="btn mini" style="margin-top:6px" onclick="backup()">💾 Respaldar ahora</button>`}
 function restore(ev){const f=ev.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);Object.entries(d).forEach(([k,v])=>{if(v!=null)localStorage.setItem(k,v)});localStorage.setItem('cub_changes',0);renderAll();renderBackupStatus();toast('✓ Respaldo restaurado')}catch(e){toast('Archivo inválido')}};rd.readAsText(f)}
-function borrarTodo(){if(!confirm('Borra flores, cosecha, volquetas, insumos, monitoreo y supervisión capturados. ¿Seguro?'))return;[DB.poli,DB.cosecha,DB.volq,DB.monit,DB.superv,DB.insumos].forEach(k=>localStorage.removeItem(k));renderAll();toast('Registros borrados')}
+function borrarTodo(){if(!confirm('Borra flores, cosecha, volquetas, insumos, monitoreo y supervisión capturados. ¿Seguro?'))return;[DB.poli,DB.cosecha,DB.volq,DB.monit,DB.superv,DB.insumos,DB.grupo].forEach(k=>localStorage.removeItem(k));renderAll();toast('Registros borrados')}
 
 //============ FOTOS ============
 function compressImg(file,cb){const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{const M=900;let w=img.width,h=img.height;if(w>h&&w>M){h=h*M/w;w=M}else if(h>M){w=w*M/h;h=M}const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);cb(c.toDataURL('image/jpeg',0.55))};img.src=r.result};r.readAsDataURL(file)}
@@ -1082,8 +1153,8 @@ function printBlank(tipo){
     <div class="firma"><div>Responsable</div><div>Jefe de plantación</div></div>`)}
 
 //============ RENDER TODO ============
-function renderAll(){renderPoli();renderCosecha();renderLiquidacion();renderInsumos();renderLabores();renderMonitoreo();renderSuperv();renderTrab();renderTablero();renderVivero();renderLotes();renderPrecios();renderPrecio();calcPersonal();fillWorkerSelects()}
-seedTrab();addCortField();buildControles();initNormas();initLineViewer();renderAll();
+function renderAll(){renderPoli();renderCosecha();renderLiquidacion();renderInsumos();renderLabores();renderMonitoreo();renderSuperv();renderTrab();renderGrupo();renderTablero();renderVivero();renderLotes();renderPrecios();renderPrecio();calcPersonal();fillWorkerSelects()}
+seedTrab();addCortField();buildControles();initNormas();initLineViewer();fillLineasRange();renderGrupoPart();renderAll();
 document.getElementById('roleSel').value=ROLE;document.getElementById('lockLogo').src=CARINTHIA_LOGO;buildNav();fillWorkerSelects();
 if(PASSWORDS[ROLE]&&!window._auth[ROLE]){showLock(ROLE)}
 hookPhoto('m_foto','m_fotoprev','_foto_m');hookPhoto('sp_foto','sp_fotoprev','_foto_sp');

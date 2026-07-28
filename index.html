@@ -177,8 +177,11 @@
     <div class="muted">Censo de polinización. Este dato el gerente lo puede digitar en su Excel para proyectar cosecha a 5,5 meses.</div>
     <div class="row">
       <div><label>Fecha</label><input type="date" id="p_fecha"></div>
-      <div><label>Lote</label><select id="p_lote" onchange="fillLineas('p_lote','p_linea')"></select></div>
-      <div><label>Línea de palma</label><select id="p_linea"></select></div>
+      <div><label>Lote</label><select id="p_lote" onchange="fillRange('p_lote','p_ldesde','p_lhasta')"></select></div>
+    </div>
+    <div class="row">
+      <div><label>Línea desde</label><select id="p_ldesde"></select></div>
+      <div><label>Línea hasta</label><select id="p_lhasta"></select></div>
     </div>
     <div class="row">
       <div><label>Polinizador</label><select id="p_poli"></select></div>
@@ -641,19 +644,20 @@ function fillLineas(loteSelId,lineaSelId){
   let o='<option value="">— elegir línea —</option>';
   arr.forEach((p,i)=>{o+=`<option value="L${i+1}">L${i+1} · ${p} palmas</option>`});
   sel.innerHTML=o}
-fillLineas('p_lote','p_linea');fillLineas('c_lote','c_linea');
+fillRange('p_lote','p_ldesde','p_lhasta');fillLineas('c_lote','c_linea');
 // seed labores primera vez
 if(localStorage.getItem(DB.labores)===null){save(DB.labores,LABORES_SEED.map((l,i)=>Object.assign({id:Date.now()+i},l)))}
 
 //============ VÍA 1: FLORES ============
 function addPoli(){
   const g=id=>document.getElementById(id);
-  const r={id:Date.now(),fecha:g('p_fecha').value,lote:g('p_lote').value,linea:g('p_linea').value.trim(),poli:g('p_poli').value.trim(),
+  const ld=g('p_ldesde').value,lh=g('p_lhasta').value;
+  const r={id:Date.now(),fecha:g('p_fecha').value,lote:g('p_lote').value,ldesde:ld,lhasta:lh,linea:(ld?'L'+ld:'')+(lh&&lh!==ld?'–L'+lh:''),poli:g('p_poli').value.trim(),
     flores:+g('p_flores').value||0,polinizadas:+g('p_polinizadas').value||0,palmas:+g('p_palmas').value||0,
     pase:g('p_pase').value,ana:g('p_ana').value,obs:g('p_obs').value.trim()};
   if(!r.poli){toast('Falta el polinizador');return}
   const d=load(DB.poli);d.unshift(r);save(DB.poli,d);
-  ['p_linea','p_flores','p_polinizadas','p_palmas','p_obs'].forEach(id=>g(id).value='');
+  ['p_flores','p_polinizadas','p_palmas','p_obs'].forEach(id=>g(id).value='');
   toast('✓ Flores guardadas');renderPoli();renderTablero();refreshDatalists()}
 function renderPoli(){
   const d=load(DB.poli);document.getElementById('p_count').textContent='('+d.length+')';
@@ -774,11 +778,12 @@ function renderInsumos(){
      <div class="kpi"><div class="n">${fmt(d.length)}</div><div class="l">Jornadas registradas</div><div class="d"></div></div>`}
 
 //============ POLINIZACIÓN EN GRUPO (fase preventiva) ============
-function fillLineasRange(){
-  const lote=document.getElementById('gr_lote').value;const arr=LINEAS_LOTE[lote]||[];
+function fillRange(loteId,fromId,toId){
+  const lote=document.getElementById(loteId).value;const arr=LINEAS_LOTE[lote]||[];
   const opts=arr.length?arr.map((p,i)=>`<option value="${i+1}">L${i+1} · ${p} palmas</option>`).join(''):'<option value="">(sin líneas)</option>';
-  document.getElementById('gr_ldesde').innerHTML=opts;document.getElementById('gr_lhasta').innerHTML=opts;
-  if(arr.length){document.getElementById('gr_lhasta').value=arr.length}}
+  const d=document.getElementById(fromId),h=document.getElementById(toId);
+  if(d)d.innerHTML=opts;if(h){h.innerHTML=opts;if(arr.length)h.value=arr.length}}
+function fillLineasRange(){fillRange('gr_lote','gr_ldesde','gr_lhasta')}
 function renderGrupoPart(){
   const pol=load(DB.trab).filter(t=>t.pol);
   document.getElementById('gr_part').innerHTML=pol.length?pol.map(t=>`<label class="pill" style="cursor:pointer"><input type="checkbox" class="grp" value="${t.nombre}" style="margin-right:5px">${t.nombre}</label>`).join(''):'<span class="muted">Agrega polinizadores en Datos → Trabajadores.</span>'}
@@ -991,8 +996,8 @@ function csvEsc(v){v=(v==null?'':''+v);return /[",;\n]/.test(v)?'"'+v.replace(/"
 function download(name,content,type){const b=new Blob([content],{type});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
 function exportCSV(kind){
   let rows=[],name='';const fecha=todayISO();
-  if(kind==='flores'){name='flores_'+fecha+'.csv';rows.push(['Fecha','Lote','Linea','Polinizador','Flores antesis','Flores polinizadas','Palmas','Tipo pase','Polen ANA','Observacion']);
-    load(DB.poli).forEach(r=>rows.push([r.fecha,r.lote,r.linea||'',r.poli,r.flores,r.polinizadas,r.palmas,r.pase||'Único',r.ana||'No',r.obs]))}
+  if(kind==='flores'){name='flores_'+fecha+'.csv';rows.push(['Fecha','Lote','Linea desde','Linea hasta','Polinizador','Flores antesis','Flores polinizadas','Palmas','Tipo pase','Polen ANA','Observacion']);
+    load(DB.poli).forEach(r=>rows.push([r.fecha,r.lote,r.ldesde||r.linea||'',r.lhasta||'',r.poli,r.flores,r.polinizadas,r.palmas,r.pase||'Único',r.ana||'No',r.obs]))}
   if(kind==='cosecha_dia'){name='cosecha_diaria_'+fecha+'.csv';rows.push(['Fecha','Racimos','Kg','Promedio']);
     // agrupa por fecha uniendo cosecha (racimos) con volqueta (kg) — formato del Excel del gerente
     const porF={};load(DB.cosecha).forEach(r=>{porF[r.fecha]=porF[r.fecha]||{rac:0,kg:0};porF[r.fecha].rac+=r.racimos});

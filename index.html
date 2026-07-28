@@ -1164,7 +1164,13 @@ document.getElementById('roleSel').value=ROLE;document.getElementById('lockLogo'
 if(PASSWORDS[ROLE]&&!window._auth[ROLE]){showLock(ROLE)}
 hookPhoto('m_foto','m_fotoprev','_foto_m');hookPhoto('sp_foto','sp_fotoprev','_foto_sp');
 
-if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(){})});}
+if('serviceWorker' in navigator){
+  let _r=false;
+  navigator.serviceWorker.addEventListener('controllerchange',function(){if(_r)return;_r=true;location.reload();});
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('./sw.js').then(function(reg){reg.update();setInterval(function(){reg.update();},60000);}).catch(function(){});
+  });
+}
 </script>
 </body>
 </html>

@@ -32,10 +32,17 @@ async function up(obj, rev) {
   const r = await fetch('https://content.dropboxapi.com/2/files/upload', { method: 'POST', headers: { 'Authorization': 'Bearer ' + t, 'Dropbox-API-Arg': JSON.stringify(arg), 'Content-Type': 'application/octet-stream' }, body: JSON.stringify(obj) });
   return r.ok;
 }
-function merge(a, b) {
+function merge(a, b, col) {
   const m = {};
   (a || []).concat(b || []).forEach(r => { if (!r || r.id == null) return; const k = r.id, c = m[k]; if (!c || ((r._m || r.id) >= (c._m || c.id))) m[k] = r; });
-  return Object.values(m);
+  let out = Object.values(m);
+  const key = col === 'trab' ? 'nombre' : (col === 'labores' ? 'desc' : null);
+  if (key) {
+    const bk = {};
+    out.forEach(r => { const kk = (r[key] || '').toString().trim().toLowerCase(); if (!kk) { bk['__' + r.id] = r; return; } const c = bk[kk]; if (!c || ((r._m || r.id) >= (c._m || c.id))) bk[kk] = r; });
+    out = Object.values(bk);
+  }
+  return out;
 }
 function sendJSON(res, code, obj) { res.writeHead(code, Object.assign({ 'Content-Type': 'application/json' }, CORS)); res.end(JSON.stringify(obj)); }
 
@@ -53,9 +60,9 @@ const server = http.createServer((req, res) => {
         try {
           const incoming = JSON.parse(body || '{}');
           let { data, rev } = await dl(); data = data || {};
-          const out = {}; COLS.forEach(c => { out[c] = merge(data[c], incoming[c]); });
+          const out = {}; COLS.forEach(c => { out[c] = merge(data[c], incoming[c], c); });
           let ok = await up(out, rev);
-          if (!ok) { const d2 = await dl(); COLS.forEach(c => { out[c] = merge((d2.data || {})[c], incoming[c]); }); ok = await up(out, d2.rev); }
+          if (!ok) { const d2 = await dl(); COLS.forEach(c => { out[c] = merge((d2.data || {})[c], incoming[c], c); }); ok = await up(out, d2.rev); }
           sendJSON(res, 200, out);
         } catch (e) { sendJSON(res, 500, { error: 'server' }); }
       });

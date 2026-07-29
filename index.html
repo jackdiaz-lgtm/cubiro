@@ -1167,7 +1167,7 @@ function printBlank(tipo){
     <div class="firma"><div>Responsable</div><div>Jefe de plantación</div></div>`)}
 
 //============ SINCRONIZACIÓN (servidor Railway) ============
-const API_BASE='https://cubiro-production.up.railway.app';
+const API_BASE=(location.hostname.indexOf('railway')>=0)?'':'https://cubiro-production.up.railway.app';
 const SYNC_COLS=['poli','cosecha','volq','labores','monit','superv','insumos','trab','grupo','preciohist'];
 function getPin(){return localStorage.getItem('cub_pin')||''}
 function setSync(msg,cls){const el=document.getElementById('sync_status');if(el){el.textContent=msg;el.className='note'+(cls?' '+cls:'')}}

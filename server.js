@@ -1,20 +1,13 @@
-const express = require('express');
+const http = require('http');
+const fs = require('fs');
 const path = require('path');
-const app = express();
 
-app.use(express.json({ limit: '8mb' }));
-app.use((req, res, next) => {
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, x-pin');
-  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
-
-const KEY = process.env.DROPBOX_APP_KEY || '';
+const KEY = process.env.DROPBOX_APP_KEY || '4pt6d2d7f8q1z7n';
 const REFRESH = process.env.DROPBOX_REFRESH_TOKEN || '';
 const PINS = (process.env.APP_PINS || 'ALFONSO2026,SUPERVISOR,CARINTHIA2009').split(',').map(s => s.trim()).filter(Boolean);
 const COLS = ['poli', 'cosecha', 'volq', 'labores', 'monit', 'superv', 'insumos', 'trab', 'grupo', 'preciohist'];
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.css': 'text/css', '.svg': 'image/svg+xml' };
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, x-pin', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
 
 let _tok = null, _exp = 0;
 async function token() {
@@ -44,27 +37,47 @@ function merge(a, b) {
   (a || []).concat(b || []).forEach(r => { if (!r || r.id == null) return; const k = r.id, c = m[k]; if (!c || ((r._m || r.id) >= (c._m || c.id))) m[k] = r; });
   return Object.values(m);
 }
-function auth(req, res) { const p = req.get('x-pin') || ''; if (!PINS.includes(p)) { res.status(401).json({ error: 'unauthorized' }); return false; } return true; }
+function sendJSON(res, code, obj) { res.writeHead(code, Object.assign({ 'Content-Type': 'application/json' }, CORS)); res.end(JSON.stringify(obj)); }
 
-app.get('/api/data', async (req, res) => {
-  if (!auth(req, res)) return;
-  try { const { data } = await dl(); res.json(data || {}); } catch (e) { res.status(500).json({ error: 'server' }); }
+const server = http.createServer((req, res) => {
+  const u = new URL(req.url, 'http://x');
+  if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
+  if (u.pathname === '/api/health') return sendJSON(res, 200, { ok: true, dropbox: !!REFRESH });
+  if (u.pathname === '/api/data') {
+    const pin = req.headers['x-pin'] || '';
+    if (!PINS.includes(pin)) return sendJSON(res, 401, { error: 'unauthorized' });
+    if (req.method === 'GET') { dl().then(({ data }) => sendJSON(res, 200, data || {})).catch(() => sendJSON(res, 500, { error: 'server' })); return; }
+    if (req.method === 'POST') {
+      let body = ''; req.on('data', c => body += c);
+      req.on('end', async () => {
+        try {
+          const incoming = JSON.parse(body || '{}');
+          let { data, rev } = await dl(); data = data || {};
+          const out = {}; COLS.forEach(c => { out[c] = merge(data[c], incoming[c]); });
+          let ok = await up(out, rev);
+          if (!ok) { const d2 = await dl(); COLS.forEach(c => { out[c] = merge((d2.data || {})[c], incoming[c]); }); ok = await up(out, d2.rev); }
+          sendJSON(res, 200, out);
+        } catch (e) { sendJSON(res, 500, { error: 'server' }); }
+      });
+      return;
+    }
+    return sendJSON(res, 405, { error: 'method' });
+  }
+  let p = u.pathname === '/' ? '/index.html' : u.pathname;
+  let fp = path.join(__dirname, decodeURIComponent(p));
+  if (!fp.startsWith(__dirname)) fp = path.join(__dirname, 'index.html');
+  fs.readFile(fp, (err, buf) => {
+    if (err) {
+      fs.readFile(path.join(__dirname, 'index.html'), (e2, b2) => {
+        if (e2) { res.writeHead(404); res.end('not found'); }
+        else { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(b2); }
+      });
+      return;
+    }
+    const ext = path.extname(fp).toLowerCase();
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    res.end(buf);
+  });
 });
-app.post('/api/data', async (req, res) => {
-  if (!auth(req, res)) return;
-  try {
-    const incoming = req.body || {};
-    let { data, rev } = await dl(); data = data || {};
-    const out = {}; COLS.forEach(c => { out[c] = merge(data[c], incoming[c]); });
-    let ok = await up(out, rev);
-    if (!ok) { const d2 = await dl(); COLS.forEach(c => { out[c] = merge((d2.data || {})[c], incoming[c]); }); ok = await up(out, d2.rev); }
-    res.json(out);
-  } catch (e) { res.status(500).json({ error: 'server' }); }
-});
-app.get('/api/health', (req, res) => res.json({ ok: true, dropbox: !!REFRESH }));
-
-app.use(express.static(__dirname));
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('CubiroSync server on ' + PORT));
+server.listen(PORT, () => console.log('CubiroSync server (node) on ' + PORT));

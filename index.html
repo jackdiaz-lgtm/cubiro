@@ -434,6 +434,17 @@
 
 <!-- ================= DATOS ================= -->
 <section class="tab" id="tab-datos">
+  <div class="card" style="background:#f5faf3">
+    <h2>☁️ Sincronización (Dropbox)</h2>
+    <div class="muted">Comparte los datos entre todos los dispositivos que entren a la <b>misma cuenta de Dropbox del predio</b>. Funciona offline: captura sin señal y sube cuando hay internet.</div>
+    <div id="sync_status" class="note" style="margin-top:8px">Sin conectar.</div>
+    <div style="margin-top:8px">
+      <button class="btn sec mini" id="sync_connect" onclick="dbxConnect()">🔗 Conectar Dropbox</button>
+      <button class="btn sec mini" id="sync_now" onclick="syncNow()">🔄 Sincronizar ahora</button>
+      <button class="btn sec mini" id="sync_off" onclick="dbxDisconnect()">Desconectar</button>
+    </div>
+  </div>
+
   <div class="card">
     <h2>👥 Trabajadores (para las listas desplegables)</h2>
     <div class="muted">Registra aquí los cosecheros y polinizadores. Sus nombres aparecen como lista desplegable al capturar cosecha y flores (evita errores en la nómina).</div>
@@ -592,7 +603,7 @@ const SEED_SNAPSHOT={"cub_poli":[{"id":1785176384742,"fecha":"2026-07-27","lote"
 const CONTROLES_SUP=['Calidad de cosecha (corte correcto, sin pérdida de fruto, manejo del racimo)','Control sanitario (inspección fitosanitaria permanente)','Calidad de supervisión y destape (verificación de polinización, seguimiento del ciclo 5,5 m)','Auditoría de poda y mantenimiento (arquitectura de la palma, cobertura en época seca)','Eficiencia y cumplimiento de metas por sector'];
 const load=(k)=>JSON.parse(localStorage.getItem(k)||'[]');
 const loadObj=(k,def)=>{try{return Object.assign({},def,JSON.parse(localStorage.getItem(k)||'{}'))}catch(e){return def}};
-const save=(k,v)=>{localStorage.setItem(k,JSON.stringify(v));if(k!=='cub_normas'){localStorage.setItem('cub_changes',(+(localStorage.getItem('cub_changes')||0))+1);if(typeof renderBackupStatus==='function')renderBackupStatus()}};
+const save=(k,v)=>{localStorage.setItem(k,JSON.stringify(v));if(k!=='cub_normas'){localStorage.setItem('cub_changes',(+(localStorage.getItem('cub_changes')||0))+1);if(typeof renderBackupStatus==='function')renderBackupStatus();if(typeof scheduleSync==='function')scheduleSync()}};
 function toast(m){const t=document.getElementById('toast');t.innerHTML=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
 const fmt=(x,d=0)=>x==null?'—':Number(x).toLocaleString('es-CO',{minimumFractionDigits:d,maximumFractionDigits:d});
 const todayISO=()=>new Date().toISOString().slice(0,10);
@@ -714,7 +725,7 @@ function addLabor(){
   const d=load(DB.labores);d.unshift(r);save(DB.labores,d);
   ['l_desc','l_lote','l_fecha','l_dosis','l_fuente'].forEach(id=>g(id).value='');
   toast('✓ Labor agregada');renderLabores()}
-function setEstado(id,est){const d=load(DB.labores);const l=d.find(x=>x.id===id);if(l)l.estado=est;save(DB.labores,d);renderLabores();renderTablero()}
+function setEstado(id,est){const d=load(DB.labores);const l=d.find(x=>x.id===id);if(l){l.estado=est;l._m=Date.now()}save(DB.labores,d);renderLabores();renderTablero()}
 function renderLabores(){
   let d=load(DB.labores);
   if(LAB_FILTER==='pend')d=d.filter(l=>l.estado!=='hecho');
@@ -972,7 +983,7 @@ function addTrab(){
   d.sort((a,b)=>a.nombre.localeCompare(b.nombre));save(DB.trab,d);
   g('t_nombre').value='';g('t_cos').checked=true;g('t_pol').checked=false;
   toast('✓ Trabajador agregado');renderTrab();fillWorkerSelects()}
-function toggleTrabRol(id,rol){const d=load(DB.trab);const t=d.find(x=>x.id===id);if(t){t[rol]=!t[rol];save(DB.trab,d);renderTrab();fillWorkerSelects()}}
+function toggleTrabRol(id,rol){const d=load(DB.trab);const t=d.find(x=>x.id===id);if(t){t[rol]=!t[rol];t._m=Date.now();save(DB.trab,d);renderTrab();fillWorkerSelects()}}
 function renderTrab(){
   const d=load(DB.trab);const el=document.getElementById('t_list');if(!el)return;
   if(!d.length){el.innerHTML='<div class="muted">Aún no hay trabajadores. Agrega los nombres arriba.</div>';return}
@@ -1157,19 +1168,85 @@ function printBlank(tipo){
   printDoc(titulo,`${extra}<table>${head}${blankRows(cols,n)}</table>
     <div class="firma"><div>Responsable</div><div>Jefe de plantación</div></div>`)}
 
+//============ SINCRONIZACIÓN DROPBOX ============
+const DBX_KEY='4pt6d2d7f8q1z7n';
+const SYNC_COLS=['poli','cosecha','volq','labores','monit','superv','insumos','trab','grupo','preciohist'];
+function dbxRedirect(){return location.href.split('?')[0].split('#')[0]}
+function b64url(buf){return btoa(String.fromCharCode.apply(null,new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+async function sha256(s){return await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))}
+function randStr(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return b64url(a.buffer)}
+async function dbxConnect(){
+  try{const v=randStr(64);localStorage.setItem('dbx_verifier',v);const ch=b64url(await sha256(v));
+  location.href='https://www.dropbox.com/oauth2/authorize?client_id='+DBX_KEY+'&response_type=code&code_challenge='+ch+'&code_challenge_method=S256&token_access_type=offline&redirect_uri='+encodeURIComponent(dbxRedirect());
+  }catch(e){toast('No se pudo iniciar Dropbox')}}
+async function dbxHandleRedirect(){
+  const p=new URLSearchParams(location.search);const code=p.get('code');if(!code)return;
+  const v=localStorage.getItem('dbx_verifier')||'';
+  try{const body=new URLSearchParams({code:code,grant_type:'authorization_code',client_id:DBX_KEY,code_verifier:v,redirect_uri:dbxRedirect()});
+    const res=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body});
+    const j=await res.json();
+    if(j.access_token){localStorage.setItem('dbx_tok',j.access_token);if(j.refresh_token)localStorage.setItem('dbx_refresh',j.refresh_token);localStorage.setItem('dbx_exp',Date.now()+((j.expires_in||14400)*1000));toast('✓ Dropbox conectado')}
+  }catch(e){}
+  history.replaceState({},'',dbxRedirect());updateSyncUI();syncNow();}
+async function dbxToken(){
+  const tok=localStorage.getItem('dbx_tok');const exp=+localStorage.getItem('dbx_exp')||0;
+  if(tok&&Date.now()<exp-60000)return tok;
+  const rt=localStorage.getItem('dbx_refresh');if(!rt)return tok||null;
+  try{const body=new URLSearchParams({grant_type:'refresh_token',refresh_token:rt,client_id:DBX_KEY});
+    const res=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body});
+    const j=await res.json();if(j.access_token){localStorage.setItem('dbx_tok',j.access_token);localStorage.setItem('dbx_exp',Date.now()+((j.expires_in||14400)*1000));return j.access_token}}catch(e){}
+  return null;}
+function dbxConnected(){return !!(localStorage.getItem('dbx_refresh')||localStorage.getItem('dbx_tok'))}
+function dbxDisconnect(){['dbx_tok','dbx_refresh','dbx_exp','dbx_verifier'].forEach(k=>localStorage.removeItem(k));updateSyncUI();toast('Dropbox desconectado')}
+async function dbxDownload(){
+  const tok=await dbxToken();if(!tok)return {data:null,rev:null};
+  const r=await fetch('https://content.dropboxapi.com/2/files/download',{method:'POST',headers:{'Authorization':'Bearer '+tok,'Dropbox-API-Arg':JSON.stringify({path:'/datos.json'})}});
+  if(!r.ok)return {data:null,rev:null};
+  let meta={};try{meta=JSON.parse(r.headers.get('dropbox-api-result')||'{}')}catch(e){}
+  const txt=await r.text();let data=null;try{data=JSON.parse(txt)}catch(e){}
+  return {data:data,rev:meta.rev||null};}
+async function dbxUpload(obj,rev){
+  const tok=await dbxToken();if(!tok)return false;
+  const arg={path:'/datos.json',mode:rev?{'.tag':'update',update:rev}:{'.tag':'overwrite'},autorename:false,mute:true};
+  const r=await fetch('https://content.dropboxapi.com/2/files/upload',{method:'POST',headers:{'Authorization':'Bearer '+tok,'Dropbox-API-Arg':JSON.stringify(arg),'Content-Type':'application/octet-stream'},body:JSON.stringify(obj)});
+  return r.ok;}
+function mergeCol(a,b){const m={};(a||[]).concat(b||[]).forEach(r=>{if(!r||r.id==null)return;const k=r.id,cur=m[k];if(!cur||((r._m||r.id)>=(cur._m||cur.id)))m[k]=r});return Object.values(m)}
+function setSync(msg,cls){const el=document.getElementById('sync_status');if(el){el.textContent=msg;el.className='note'+(cls?' '+cls:'')}}
+let syncing=false,syncTimer=null;
+function scheduleSync(){if(syncing||!dbxConnected())return;clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,3000)}
+async function syncNow(){
+  if(syncing)return;if(!dbxConnected()){setSync('Sin conectar.');return}
+  if(!navigator.onLine){setSync('Sin internet — se sincroniza al reconectar.');return}
+  syncing=true;setSync('Sincronizando…');
+  try{
+    let rem=await dbxDownload();let rdata=(rem&&rem.data)||{};
+    const out={};SYNC_COLS.forEach(c=>{const mg=mergeCol(load(DB[c]),rdata[c]||[]);out[c]=mg;localStorage.setItem(DB[c],JSON.stringify(mg))});
+    let ok=await dbxUpload(out,rem?rem.rev:null);
+    if(!ok){rem=await dbxDownload();rdata=(rem&&rem.data)||{};const out2={};SYNC_COLS.forEach(c=>{const mg=mergeCol(load(DB[c]),rdata[c]||[]);out2[c]=mg;localStorage.setItem(DB[c],JSON.stringify(mg))});ok=await dbxUpload(out2,rem?rem.rev:null)}
+    if(ok){localStorage.setItem('dbx_lastsync',Date.now());setSync('✓ Sincronizado '+new Date().toLocaleTimeString('es-CO'),'ok-note')}
+    else{setSync('No se pudo subir. Reintentará.','bad-note')}
+    syncing=false;renderAll();
+  }catch(e){syncing=false;setSync('Error de sincronización.','bad-note')}}
+function updateSyncUI(){
+  const on=dbxConnected();const c=document.getElementById('sync_connect'),n=document.getElementById('sync_now'),o=document.getElementById('sync_off');
+  if(c)c.style.display=on?'none':'';if(n)n.style.display=on?'':'none';if(o)o.style.display=on?'':'none';
+  if(!on){setSync('Sin conectar. Pulsa "Conectar Dropbox".');return}
+  const ls=+localStorage.getItem('dbx_lastsync')||0;setSync(ls?('✓ Conectado · último: '+new Date(ls).toLocaleString('es-CO')):'Conectado. Sincronizando…','ok-note')}
+
 //============ RENDER TODO ============
 function renderAll(){renderPoli();renderCosecha();renderLiquidacion();renderInsumos();renderLabores();renderMonitoreo();renderSuperv();renderTrab();renderGrupo();renderTablero();renderVivero();renderLotes();renderPrecios();renderPrecio();calcPersonal();fillWorkerSelects()}
 seedTrab();addCortField();buildControles();initNormas();initLineViewer();fillLineasRange();renderGrupoPart();renderAll();
 document.getElementById('roleSel').value=ROLE;document.getElementById('lockLogo').src=CARINTHIA_LOGO;buildNav();fillWorkerSelects();
 if(PASSWORDS[ROLE]&&!window._auth[ROLE]){showLock(ROLE)}
 hookPhoto('m_foto','m_fotoprev','_foto_m');hookPhoto('sp_foto','sp_fotoprev','_foto_sp');
+updateSyncUI();dbxHandleRedirect();if(dbxConnected())syncNow();
+window.addEventListener('online',function(){if(dbxConnected())syncNow()});
+setInterval(function(){if(dbxConnected())syncNow()},120000);
 
 if('serviceWorker' in navigator){
   let _r=false;
   navigator.serviceWorker.addEventListener('controllerchange',function(){if(_r)return;_r=true;location.reload();});
-  window.addEventListener('load',function(){
-    navigator.serviceWorker.register('./sw.js').then(function(reg){reg.update();setInterval(function(){reg.update();},60000);}).catch(function(){});
-  });
+  window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').then(function(reg){reg.update();setInterval(function(){reg.update();},60000);}).catch(function(){});});
 }
 </script>
 </body>

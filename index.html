@@ -435,13 +435,11 @@
 <!-- ================= DATOS ================= -->
 <section class="tab" id="tab-datos">
   <div class="card" style="background:#f5faf3">
-    <h2>☁️ Sincronización (Dropbox)</h2>
-    <div class="muted">Comparte los datos entre todos los dispositivos que entren a la <b>misma cuenta de Dropbox del predio</b>. Funciona offline: captura sin señal y sube cuando hay internet.</div>
-    <div id="sync_status" class="note" style="margin-top:8px">Sin conectar.</div>
+    <h2>☁️ Sincronización</h2>
+    <div class="muted">Los datos se comparten entre todos los dispositivos a través del servidor del predio (que guarda en Dropbox). Solo usas tu PIN de perfil; no necesitas cuenta de Dropbox. Funciona offline: captura sin señal y sube cuando hay internet.</div>
+    <div id="sync_status" class="note" style="margin-top:8px">—</div>
     <div style="margin-top:8px">
-      <button class="btn sec mini" id="sync_connect" onclick="dbxConnect()">🔗 Conectar Dropbox</button>
       <button class="btn sec mini" id="sync_now" onclick="syncNow()">🔄 Sincronizar ahora</button>
-      <button class="btn sec mini" id="sync_off" onclick="dbxDisconnect()">Desconectar</button>
     </div>
   </div>
 
@@ -634,7 +632,7 @@ function showLock(role){
   setTimeout(()=>document.getElementById('lockPass').focus(),120)}
 function submitLock(){
   const r=PENDING_ROLE,v=document.getElementById('lockPass').value;
-  if(!PASSWORDS[r]||v===PASSWORDS[r]){window._auth[r]=true;document.getElementById('lockScreen').style.display='none';applyRole(r)}
+  if(!PASSWORDS[r]||v===PASSWORDS[r]){window._auth[r]=true;if(v)localStorage.setItem('cub_pin',v);document.getElementById('lockScreen').style.display='none';applyRole(r);if(typeof syncNow==='function')syncNow()}
   else{document.getElementById('lockMsg').textContent='Contraseña incorrecta. Intente de nuevo.';document.getElementById('lockPass').select()}}
 function setRole(r){if(!PASSWORDS[r]||window._auth[r]){applyRole(r);return}document.getElementById('roleSel').value=ROLE;showLock(r)}
 function applyRoleCards(){document.querySelectorAll('[data-role]').forEach(el=>{el.style.display=el.dataset.role.split(',').includes(ROLE)?'':'none'})}
@@ -1168,70 +1166,32 @@ function printBlank(tipo){
   printDoc(titulo,`${extra}<table>${head}${blankRows(cols,n)}</table>
     <div class="firma"><div>Responsable</div><div>Jefe de plantación</div></div>`)}
 
-//============ SINCRONIZACIÓN DROPBOX ============
-const DBX_KEY='4pt6d2d7f8q1z7n';
+//============ SINCRONIZACIÓN (servidor Railway) ============
+const API_BASE='https://cubiro-production.up.railway.app';
 const SYNC_COLS=['poli','cosecha','volq','labores','monit','superv','insumos','trab','grupo','preciohist'];
-function dbxRedirect(){return location.href.split('?')[0].split('#')[0]}
-function b64url(buf){return btoa(String.fromCharCode.apply(null,new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
-async function sha256(s){return await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))}
-function randStr(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return b64url(a.buffer)}
-async function dbxConnect(){
-  try{const v=randStr(64);localStorage.setItem('dbx_verifier',v);const ch=b64url(await sha256(v));
-  location.href='https://www.dropbox.com/oauth2/authorize?client_id='+DBX_KEY+'&response_type=code&code_challenge='+ch+'&code_challenge_method=S256&token_access_type=offline&redirect_uri='+encodeURIComponent(dbxRedirect());
-  }catch(e){toast('No se pudo iniciar Dropbox')}}
-async function dbxHandleRedirect(){
-  const p=new URLSearchParams(location.search);const code=p.get('code');if(!code)return;
-  const v=localStorage.getItem('dbx_verifier')||'';
-  try{const body=new URLSearchParams({code:code,grant_type:'authorization_code',client_id:DBX_KEY,code_verifier:v,redirect_uri:dbxRedirect()});
-    const res=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body});
-    const j=await res.json();
-    if(j.access_token){localStorage.setItem('dbx_tok',j.access_token);if(j.refresh_token)localStorage.setItem('dbx_refresh',j.refresh_token);localStorage.setItem('dbx_exp',Date.now()+((j.expires_in||14400)*1000));toast('✓ Dropbox conectado')}
-  }catch(e){}
-  history.replaceState({},'',dbxRedirect());updateSyncUI();syncNow();}
-async function dbxToken(){
-  const tok=localStorage.getItem('dbx_tok');const exp=+localStorage.getItem('dbx_exp')||0;
-  if(tok&&Date.now()<exp-60000)return tok;
-  const rt=localStorage.getItem('dbx_refresh');if(!rt)return tok||null;
-  try{const body=new URLSearchParams({grant_type:'refresh_token',refresh_token:rt,client_id:DBX_KEY});
-    const res=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body});
-    const j=await res.json();if(j.access_token){localStorage.setItem('dbx_tok',j.access_token);localStorage.setItem('dbx_exp',Date.now()+((j.expires_in||14400)*1000));return j.access_token}}catch(e){}
-  return null;}
-function dbxConnected(){return !!(localStorage.getItem('dbx_refresh')||localStorage.getItem('dbx_tok'))}
-function dbxDisconnect(){['dbx_tok','dbx_refresh','dbx_exp','dbx_verifier'].forEach(k=>localStorage.removeItem(k));updateSyncUI();toast('Dropbox desconectado')}
-async function dbxDownload(){
-  const tok=await dbxToken();if(!tok)return {data:null,rev:null};
-  const r=await fetch('https://content.dropboxapi.com/2/files/download',{method:'POST',headers:{'Authorization':'Bearer '+tok,'Dropbox-API-Arg':JSON.stringify({path:'/datos.json'})}});
-  if(!r.ok)return {data:null,rev:null};
-  let meta={};try{meta=JSON.parse(r.headers.get('dropbox-api-result')||'{}')}catch(e){}
-  const txt=await r.text();let data=null;try{data=JSON.parse(txt)}catch(e){}
-  return {data:data,rev:meta.rev||null};}
-async function dbxUpload(obj,rev){
-  const tok=await dbxToken();if(!tok)return false;
-  const arg={path:'/datos.json',mode:rev?{'.tag':'update',update:rev}:{'.tag':'overwrite'},autorename:false,mute:true};
-  const r=await fetch('https://content.dropboxapi.com/2/files/upload',{method:'POST',headers:{'Authorization':'Bearer '+tok,'Dropbox-API-Arg':JSON.stringify(arg),'Content-Type':'application/octet-stream'},body:JSON.stringify(obj)});
-  return r.ok;}
-function mergeCol(a,b){const m={};(a||[]).concat(b||[]).forEach(r=>{if(!r||r.id==null)return;const k=r.id,cur=m[k];if(!cur||((r._m||r.id)>=(cur._m||cur.id)))m[k]=r});return Object.values(m)}
+function getPin(){return localStorage.getItem('cub_pin')||''}
 function setSync(msg,cls){const el=document.getElementById('sync_status');if(el){el.textContent=msg;el.className='note'+(cls?' '+cls:'')}}
 let syncing=false,syncTimer=null;
-function scheduleSync(){if(syncing||!dbxConnected())return;clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,3000)}
+function scheduleSync(){if(syncing||!getPin())return;clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,3000)}
 async function syncNow(){
-  if(syncing)return;if(!dbxConnected()){setSync('Sin conectar.');return}
+  if(syncing)return;
+  if(!getPin()){setSync('Inicia sesión con tu PIN para sincronizar.');return}
   if(!navigator.onLine){setSync('Sin internet — se sincroniza al reconectar.');return}
   syncing=true;setSync('Sincronizando…');
   try{
-    let rem=await dbxDownload();let rdata=(rem&&rem.data)||{};
-    const out={};SYNC_COLS.forEach(c=>{const mg=mergeCol(load(DB[c]),rdata[c]||[]);out[c]=mg;localStorage.setItem(DB[c],JSON.stringify(mg))});
-    let ok=await dbxUpload(out,rem?rem.rev:null);
-    if(!ok){rem=await dbxDownload();rdata=(rem&&rem.data)||{};const out2={};SYNC_COLS.forEach(c=>{const mg=mergeCol(load(DB[c]),rdata[c]||[]);out2[c]=mg;localStorage.setItem(DB[c],JSON.stringify(mg))});ok=await dbxUpload(out2,rem?rem.rev:null)}
-    if(ok){localStorage.setItem('dbx_lastsync',Date.now());setSync('✓ Sincronizado '+new Date().toLocaleTimeString('es-CO'),'ok-note')}
-    else{setSync('No se pudo subir. Reintentará.','bad-note')}
+    const payload={};SYNC_COLS.forEach(c=>{payload[c]=load(DB[c])});
+    const r=await fetch(API_BASE+'/api/data',{method:'POST',headers:{'Content-Type':'application/json','x-pin':getPin()},body:JSON.stringify(payload)});
+    if(r.status===401){syncing=false;setSync('PIN no autorizado en el servidor.','bad-note');return}
+    if(!r.ok)throw 0;
+    const merged=await r.json();
+    SYNC_COLS.forEach(c=>{if(merged[c])localStorage.setItem(DB[c],JSON.stringify(merged[c]))});
+    localStorage.setItem('cub_lastsync',Date.now());
+    setSync('✓ Sincronizado '+new Date().toLocaleTimeString('es-CO'),'ok-note');
     syncing=false;renderAll();
-  }catch(e){syncing=false;setSync('Error de sincronización.','bad-note')}}
+  }catch(e){syncing=false;setSync('Error de sincronización. Reintentará.','bad-note')}}
 function updateSyncUI(){
-  const on=dbxConnected();const c=document.getElementById('sync_connect'),n=document.getElementById('sync_now'),o=document.getElementById('sync_off');
-  if(c)c.style.display=on?'none':'';if(n)n.style.display=on?'':'none';if(o)o.style.display=on?'':'none';
-  if(!on){setSync('Sin conectar. Pulsa "Conectar Dropbox".');return}
-  const ls=+localStorage.getItem('dbx_lastsync')||0;setSync(ls?('✓ Conectado · último: '+new Date(ls).toLocaleString('es-CO')):'Conectado. Sincronizando…','ok-note')}
+  const ls=+localStorage.getItem('cub_lastsync')||0;
+  setSync(ls?('✓ Comparte con el servidor · último: '+new Date(ls).toLocaleString('es-CO')):'Se sincroniza automáticamente al usar la app (con internet).', ls?'ok-note':'')}
 
 //============ RENDER TODO ============
 function renderAll(){renderPoli();renderCosecha();renderLiquidacion();renderInsumos();renderLabores();renderMonitoreo();renderSuperv();renderTrab();renderGrupo();renderTablero();renderVivero();renderLotes();renderPrecios();renderPrecio();calcPersonal();fillWorkerSelects()}
@@ -1239,15 +1199,11 @@ seedTrab();addCortField();buildControles();initNormas();initLineViewer();fillLin
 document.getElementById('roleSel').value=ROLE;document.getElementById('lockLogo').src=CARINTHIA_LOGO;buildNav();fillWorkerSelects();
 if(PASSWORDS[ROLE]&&!window._auth[ROLE]){showLock(ROLE)}
 hookPhoto('m_foto','m_fotoprev','_foto_m');hookPhoto('sp_foto','sp_fotoprev','_foto_sp');
-updateSyncUI();dbxHandleRedirect();if(dbxConnected())syncNow();
-window.addEventListener('online',function(){if(dbxConnected())syncNow()});
-setInterval(function(){if(dbxConnected())syncNow()},120000);
+updateSyncUI();if(getPin())syncNow();
+window.addEventListener('online',function(){if(getPin())syncNow()});
+setInterval(function(){if(getPin())syncNow()},120000);
 
-if('serviceWorker' in navigator){
-  let _r=false;
-  navigator.serviceWorker.addEventListener('controllerchange',function(){if(_r)return;_r=true;location.reload();});
-  window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').then(function(reg){reg.update();setInterval(function(){reg.update();},60000);}).catch(function(){});});
-}
+if('serviceWorker' in navigator){let _r=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(_r)return;_r=true;location.reload();});window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').then(function(reg){reg.update();setInterval(function(){reg.update();},60000);}).catch(function(){});});}
 </script>
 </body>
 </html>
